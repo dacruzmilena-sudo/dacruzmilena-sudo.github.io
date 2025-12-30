@@ -4,35 +4,71 @@
     <title>Transit Restaurants Map</title>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <style>
-      #map {
-        height: 100vh;
-        width: 100vw;
+      html, body {
         margin: 0;
         padding: 0;
+        height: 100%;
+        font-family: Arial, sans-serif;
       }
 
-      body {
-        margin: 0;
-        padding: 0;
+      #container {
+        display: flex;
+        height: 100vh;
+        width: 100vw;
+      }
+
+      #sidebar {
+        width: 300px;
+        max-width: 100%;
+        overflow-y: auto;
+        border-right: 1px solid #ccc;
+        padding: 10px;
+        box-sizing: border-box;
+        background-color: #f9f9f9;
+      }
+
+      #map {
+        flex-grow: 1;
+      }
+
+      .restaurant-card {
+        margin-bottom: 12px;
+        padding: 8px;
+        border-bottom: 1px solid #ccc;
+      }
+
+      .restaurant-card h4 {
+        margin: 0 0 4px;
+        font-size: 16px;
+      }
+
+      .restaurant-card small {
+        display: block;
+        color: #666;
       }
     </style>
 
-    <!-- Load Google Maps JS with Places library -->
+    <!-- Load Google Maps & Places API -->
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDFcNl93cbmd4rEBcfj4a9tlup1dpfa4wQ&libraries=places"></script>
-
-    <!-- Load external stations data -->
     <script src="stations.js"></script>
     
     <script>
+      let map;
+      const seenPlaces = new Set();  // To prevent duplicates
+      const sidebar = [];
+
       function initMap() {
-        const map = new google.maps.Map(document.getElementById("map"), {
+        map = new google.maps.Map(document.getElementById("map"), {
           center: { lat: 25.7743, lng: -80.1937 },
           zoom: 13,
         });
 
-        // Make sure `stations` is loaded from stations.js
-        if (typeof stations === 'undefined') {
+        const infoWindow = new google.maps.InfoWindow();
+        const sidebarContainer = document.getElementById("sidebar");
+
+        if (typeof stations === "undefined") {
           alert("Station data not loaded.");
           return;
         }
@@ -40,7 +76,7 @@
         stations.forEach((station) => {
           const position = { lat: station.lat, lng: station.lng };
 
-          // Draw radius circle
+          // Station circle
           new google.maps.Circle({
             map,
             center: position,
@@ -51,7 +87,7 @@
             fillOpacity: 0.1,
           });
 
-          // Add station marker
+          // Station marker
           new google.maps.Marker({
             position,
             map,
@@ -65,7 +101,7 @@
             },
           });
 
-          // Nearby restaurant search
+          // Restaurant search
           const service = new google.maps.places.PlacesService(map);
           service.nearbySearch(
             {
@@ -76,11 +112,38 @@
             (results, status) => {
               if (status === google.maps.places.PlacesServiceStatus.OK) {
                 results.forEach((place) => {
-                  new google.maps.Marker({
+                  if (seenPlaces.has(place.place_id)) return;
+                  seenPlaces.add(place.place_id);
+
+                  const marker = new google.maps.Marker({
                     position: place.geometry.location,
                     map,
                     title: place.name,
                   });
+
+                  // Marker popup with info
+                  google.maps.event.addListener(marker, "click", () => {
+                    const content = `
+                      <div>
+                        <strong>${place.name}</strong><br/>
+                        ${place.vicinity || ""}<br/>
+                        Rating: ${place.rating || "N/A"}<br/>
+                        ${place.price_level ? "$".repeat(place.price_level) : ""}
+                      </div>
+                    `;
+                    infoWindow.setContent(content);
+                    infoWindow.open(map, marker);
+                  });
+
+                  // Add to sidebar
+                  const card = document.createElement("div");
+                  card.className = "restaurant-card";
+                  card.innerHTML = `
+                    <h4>${place.name}</h4>
+                    <small>${place.vicinity || ""}</small>
+                    <small>Rating: ${place.rating || "N/A"} ${place.price_level ? " | " + "$".repeat(place.price_level) : ""}</small>
+                  `;
+                  sidebarContainer.appendChild(card);
                 });
               }
             }
@@ -91,6 +154,11 @@
   </head>
 
   <body onload="initMap()">
-    <div id="map"></div>
+    <div id="container">
+      <div id="sidebar">
+        <h3>Nearby Restaurants</h3>
+      </div>
+      <div id="map"></div>
+    </div>
   </body>
 </html>
