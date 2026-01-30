@@ -3,70 +3,54 @@
   <head>
     <title>Transit Restaurants Map</title>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
 
     <style>
       html, body {
         margin: 0;
         padding: 0;
         height: 100%;
-        font-family: Arial, sans-serif;
-      }
-
-      #container {
-        display: flex;
-        height: 100vh;
-        width: 100vw;
-      }
-
-      #sidebar {
-        width: 300px;
-        max-width: 100%;
-        overflow-y: auto;
-        border-right: 1px solid #ccc;
-        padding: 10px;
-        box-sizing: border-box;
-        background-color: #f9f9f9;
       }
 
       #map {
-        flex-grow: 1;
-      }
-
-      .restaurant-card {
-        margin-bottom: 12px;
-        padding: 8px;
-        border-bottom: 1px solid #ccc;
-      }
-
-      .restaurant-card h4 {
-        margin: 0 0 4px;
-        font-size: 16px;
-      }
-
-      .restaurant-card small {
+        height: 100%;
+        width: 100%;
         display: block;
-        color: #666;
+      }
+
+      /* Optional: Make the map full screen on mobile */
+      @media (max-width: 768px) {
+        #map {
+          position: fixed;
+          top: 0;
+          left: 0;
+          z-index: 1;
+        }
       }
     </style>
 
     <!-- Load Google Maps & Places API -->
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDFcNl93cbmd4rEBcfj4a9tlup1dpfa4wQ&libraries=places"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDFcNl93cbmd4rEBcfj4a9tlup1dpfa4wQ&libraries=places"></script>
+    <!-- Load station data -->
     <script src="stations.js"></script>
-    
+
     <script>
-      let map;
-      const seenPlaces = new Set();  // To prevent duplicates
-      const sidebar = [];
+      // List of chain restaurants to exclude
+      const excludedChains = [
+        "McDonald's", "Subway", "Starbucks", "Burger King", "Wendy's", "Domino's",
+        "Papa John's", "Chipotle", "Taco Bell", "Pollo Tropical", "Pizza Hut",
+        "KFC", "Chick-fil-A", "Dunkin'", "Popeyes", "Panera", "CVS", "Walgreens"
+      ];
 
       function initMap() {
-        map = new google.maps.Map(document.getElementById("map"), {
+        const map = new google.maps.Map(document.getElementById("map"), {
           center: { lat: 25.7743, lng: -80.1937 },
           zoom: 13,
+          gestureHandling: "greedy",
         });
 
+        const seenPlaces = new Set();
         const infoWindow = new google.maps.InfoWindow();
-        const sidebarContainer = document.getElementById("sidebar");
 
         if (typeof stations === "undefined") {
           alert("Station data not loaded.");
@@ -76,13 +60,13 @@
         stations.forEach((station) => {
           const position = { lat: station.lat, lng: station.lng };
 
-          // Station circle
+          // Walkable radius circle
           new google.maps.Circle({
             map,
             center: position,
             radius: 800,
             strokeColor: "#007BFF",
-            strokeOpacity: 0.5,
+            strokeOpacity: 0.4,
             fillColor: "#007BFF",
             fillOpacity: 0.1,
           });
@@ -101,7 +85,6 @@
             },
           });
 
-          // Restaurant search
           const service = new google.maps.places.PlacesService(map);
           service.nearbySearch(
             {
@@ -110,42 +93,37 @@
               type: "restaurant",
             },
             (results, status) => {
-              if (status === google.maps.places.PlacesServiceStatus.OK) {
-                results.forEach((place) => {
-                  if (seenPlaces.has(place.place_id)) return;
-                  seenPlaces.add(place.place_id);
+              if (status !== google.maps.places.PlacesServiceStatus.OK) return;
 
-                  const marker = new google.maps.Marker({
-                    position: place.geometry.location,
-                    map,
-                    title: place.name,
-                  });
+              results.forEach((place) => {
+                if (seenPlaces.has(place.place_id)) return;
 
-                  // Marker popup with info
-                  google.maps.event.addListener(marker, "click", () => {
-                    const content = `
-                      <div>
-                        <strong>${place.name}</strong><br/>
-                        ${place.vicinity || ""}<br/>
-                        Rating: ${place.rating || "N/A"}<br/>
-                        ${place.price_level ? "$".repeat(place.price_level) : ""}
-                      </div>
-                    `;
-                    infoWindow.setContent(content);
-                    infoWindow.open(map, marker);
-                  });
+                const isChain = excludedChains.some(chain =>
+                  place.name.toLowerCase().includes(chain.toLowerCase())
+                );
+                if (isChain) return;
 
-                  // Add to sidebar
-                  const card = document.createElement("div");
-                  card.className = "restaurant-card";
-                  card.innerHTML = `
-                    <h4>${place.name}</h4>
-                    <small>${place.vicinity || ""}</small>
-                    <small>Rating: ${place.rating || "N/A"} ${place.price_level ? " | " + "$".repeat(place.price_level) : ""}</small>
-                  `;
-                  sidebarContainer.appendChild(card);
+                seenPlaces.add(place.place_id);
+
+                const marker = new google.maps.Marker({
+                  position: place.geometry.location,
+                  map,
+                  title: place.name,
                 });
-              }
+
+                google.maps.event.addListener(marker, "click", () => {
+                  const content = `
+                    <div style="max-width: 220px;">
+                      <strong>${place.name}</strong><br/>
+                      ${place.vicinity || ""}<br/>
+                      ⭐ Rating: ${place.rating || "N/A"}<br/>
+                      ${place.price_level ? "$".repeat(place.price_level) : ""}
+                    </div>
+                  `;
+                  infoWindow.setContent(content);
+                  infoWindow.open(map, marker);
+                });
+              });
             }
           );
         });
@@ -154,11 +132,6 @@
   </head>
 
   <body onload="initMap()">
-    <div id="container">
-      <div id="sidebar">
-        <h3>Nearby Restaurants</h3>
-      </div>
-      <div id="map"></div>
-    </div>
+    <div id="map"></div>
   </body>
 </html>
